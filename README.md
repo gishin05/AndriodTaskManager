@@ -20,9 +20,7 @@
 - **CPU Usage** — Per-core and total load
 - **RAM / Memory** — Live used/available split
 - **FPS Counter** — Frame pacing via `Choreographer`
-- **Thermal & Voltage** — Battery temperature readings
-- **Network Speed** — Real-time up/downlink speeds
-
+  
 ### 🏝️ Native Dynamic Island Integration
 Works on **every modern Android phone** — not just Xiaomi:
 - **Android 16+** — Promotes to a native Live Update chip in the status bar on all OEM devices
@@ -39,26 +37,6 @@ When rotated to landscape, live metrics appear in a non-clickable always-visible
 
 ---
 
-## 🏗️ Architecture
-
-```
-app/
-├── data/
-│   ├── model/          # CpuStats, MemoryStats, FpsStats, ThermalVoltageStats, NetworkSpeedStats
-│   └── repository/     # PerformanceRepository — unified data collection
-├── service/
-│   └── IslandOverlayService.kt   # Foreground service, Dynamic Island, landscape overlay
-├── ui/
-│   ├── screens/        # Processes, Performance, Startup screens
-│   └── components/     # Reusable Compose components
-├── receiver/
-│   └── BootReceiver.kt # Auto-start on device boot
-├── theme/              # Color tokens, typography, dark theme
-└── util/
-    └── IconUtils.kt    # Live metric bitmap for notification large icon
-```
-
----
 
 ## ⚙️ Requirements
 
