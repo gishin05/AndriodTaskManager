@@ -31,7 +31,7 @@ Works on **every modern Android phone** — not just Xiaomi:
 When rotated to landscape, live metrics appear in a non-clickable always-visible status bar overlay showing CPU, RAM, temperature, and FPS simultaneously.
 
 ### 🔔 Smart Notification Design
-- Custom purple line-chart icon in the system tray
+
 - ASCII progress bars (`▓▓▓▓░░ CPU`) in the notification body
 - Live metrics in the title: `CPU 23% · RAM 61% · 45 FPS`
 
