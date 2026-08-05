@@ -122,7 +122,7 @@ fun MainScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Portrait: Floating Island  •  Landscape: Status Bar (Display Only)",
+                    text = "Portrait: Native HyperOS Dynamic Island  •  Landscape: Status Bar Mode",
                     fontSize = 10.sp,
                     color = TextMuted,
                     fontWeight = FontWeight.Medium

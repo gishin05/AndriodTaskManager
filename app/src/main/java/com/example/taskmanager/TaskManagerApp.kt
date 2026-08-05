@@ -15,11 +15,12 @@ class TaskManagerApp : Application() {
     private fun createNotificationChannel() {
         val channel = NotificationChannel(
             OVERLAY_CHANNEL_ID,
-            "Island Overlay",
-            NotificationManager.IMPORTANCE_LOW
+            "HyperOS Dynamic Island Live Updates",
+            NotificationManager.IMPORTANCE_HIGH
         ).apply {
-            description = "Persistent channel for the Island overlay service"
-            setShowBadge(false)
+            description = "Persistent channel for HyperOS Native Island Live Updates"
+            setShowBadge(true)
+            lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
         }
         val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         nm.createNotificationChannel(channel)

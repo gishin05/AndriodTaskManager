@@ -91,4 +91,7 @@ dependencies {
   implementation(libs.androidx.navigation3.ui)
   implementation(libs.androidx.navigation3.runtime)
   implementation(libs.androidx.lifecycle.viewmodel.navigation3)
+
+  // HyperIsland Toolkit
+  implementation("io.github.d4viddf:hyperisland_kit:0.4.4")
 }
