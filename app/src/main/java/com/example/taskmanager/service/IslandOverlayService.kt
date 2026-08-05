@@ -6,8 +6,10 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.content.res.Configuration
 import android.graphics.PixelFormat
 import android.os.Build
+import android.os.Bundle
 import android.os.IBinder
 import android.view.Choreographer
 import android.view.Gravity
@@ -83,8 +85,8 @@ class IslandOverlayService : LifecycleService(), SavedStateRegistryOwner {
     private val _activeApps = mutableStateOf(0)
     private val _expanded   = mutableStateOf(false)
     private val _isSideDocked = mutableStateOf(false)
+    private val _isLandscapeState = mutableStateOf(false)
     private var enableFloatingOverlay = true
-    private var overlayMode = MODE_FLOATING_ISLAND
 
     private var windowPosition = WindowSnapPosition.CENTER
 
@@ -104,15 +106,24 @@ class IslandOverlayService : LifecycleService(), SavedStateRegistryOwner {
         windowManager       = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         
+        val isLandscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        _isLandscapeState.value = isLandscape
+
         startForegroundWithNotification(
             title = "Task Manager",
             text  = "RAM: -- | CPU: -- | FPS: --",
-            subText = "Dynamic Island Active"
+            subText = "HyperOS Live Activity"
         )
 
         isFrameCallbackActive = true
         Choreographer.getInstance().postFrameCallback(choreographerCallback)
         startCollecting()
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        val isLandscape = newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE
+        updateOverlayForOrientation(isLandscape)
     }
 
     override fun onBind(intent: Intent): IBinder? {
@@ -128,9 +139,9 @@ class IslandOverlayService : LifecycleService(), SavedStateRegistryOwner {
             }
             ACTION_SET_MODE -> {
                 enableFloatingOverlay = intent.getBooleanExtra(EXTRA_ENABLE_FLOATING, true)
-                overlayMode           = intent.getIntExtra(EXTRA_MODE, MODE_FLOATING_ISLAND)
                 if (enableFloatingOverlay) {
-                    if (overlayView == null) addOverlay() else updateOverlayPosition()
+                    val isLandscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+                    if (overlayView == null) addOverlay(isLandscape) else updateOverlayForOrientation(isLandscape)
                 } else {
                     removeOverlay()
                 }
@@ -155,6 +166,14 @@ class IslandOverlayService : LifecycleService(), SavedStateRegistryOwner {
             Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE
         )
+
+        val hyperOsExtras = Bundle().apply {
+            putBoolean("miui.show_in_statusbar", true)
+            putBoolean("extra_show_in_statusbar", true)
+            putInt("miui.status_bar_notification_style", 1)
+            putString("miui.live_activity_type", "media")
+        }
+
         val notification: Notification = NotificationCompat.Builder(this, TaskManagerApp.OVERLAY_CHANNEL_ID)
             .setContentTitle(title)
             .setContentText(text)
@@ -163,8 +182,10 @@ class IslandOverlayService : LifecycleService(), SavedStateRegistryOwner {
             .setContentIntent(openIntent)
             .setOngoing(true)
             .setSilent(true)
-            .setCategory(NotificationCompat.CATEGORY_SERVICE)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .addExtras(hyperOsExtras)
             .build()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -189,24 +210,33 @@ class IslandOverlayService : LifecycleService(), SavedStateRegistryOwner {
 
         val liveIconBitmap = IconUtils.createMetricBitmap("$ramInt%", ramPct)
 
+        val hyperOsExtras = Bundle().apply {
+            putBoolean("miui.show_in_statusbar", true)
+            putBoolean("extra_show_in_statusbar", true)
+            putInt("miui.status_bar_notification_style", 1)
+            putString("miui.live_activity_type", "media")
+        }
+
         val notification: Notification = NotificationCompat.Builder(this, TaskManagerApp.OVERLAY_CHANNEL_ID)
-            .setContentTitle("RAM $ramInt%  •  CPU $cpuInt%  •  $fps FPS")
-            .setContentText("$activeAppsCount Active Apps  •  Dynamic Island Active")
-            .setSubText("Dynamic Island Active")
+            .setContentTitle("RAM $ramInt% • CPU $cpuInt% • $fps FPS")
+            .setContentText("$activeAppsCount Active Apps • Live HyperOS Activity")
+            .setSubText("HyperOS Live Activity")
             .setSmallIcon(android.R.drawable.ic_menu_info_details)
             .setLargeIcon(liveIconBitmap)
             .setContentIntent(openIntent)
             .setOngoing(true)
             .setSilent(true)
-            .setCategory(NotificationCompat.CATEGORY_SERVICE)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .addExtras(hyperOsExtras)
             .build()
 
         notificationManager.notify(TaskManagerApp.OVERLAY_NOTIFICATION_ID, notification)
     }
 
     private fun moveWindowX(deltaX: Int) {
-        if (_isSideDocked.value) return
+        if (_isSideDocked.value || _isLandscapeState.value) return
         overlayView?.let { view ->
             val params = view.layoutParams as WindowManager.LayoutParams
             params.x += deltaX
@@ -215,6 +245,7 @@ class IslandOverlayService : LifecycleService(), SavedStateRegistryOwner {
     }
 
     private fun handleSwipeLeft() {
+        if (_isLandscapeState.value) return
         val displayMetrics = resources.displayMetrics
         val screenWidthPx = displayMetrics.widthPixels
         overlayView?.let { view ->
@@ -225,7 +256,6 @@ class IslandOverlayService : LifecycleService(), SavedStateRegistryOwner {
                     params.x = -(screenWidthPx / 3)
                 }
                 WindowSnapPosition.LEFT_EDGE -> {
-                    // Swipe Left again at extreme edge -> Enter Side Dock Mode!
                     _isSideDocked.value = true
                     params.x = -(screenWidthPx / 2 - 12)
                 }
@@ -239,6 +269,7 @@ class IslandOverlayService : LifecycleService(), SavedStateRegistryOwner {
     }
 
     private fun handleSwipeRight() {
+        if (_isLandscapeState.value) return
         val displayMetrics = resources.displayMetrics
         val screenWidthPx = displayMetrics.widthPixels
         overlayView?.let { view ->
@@ -249,7 +280,6 @@ class IslandOverlayService : LifecycleService(), SavedStateRegistryOwner {
                     params.x = (screenWidthPx / 3)
                 }
                 WindowSnapPosition.RIGHT_EDGE -> {
-                    // Swipe Right again at extreme edge -> Enter Side Dock Mode!
                     _isSideDocked.value = true
                     params.x = (screenWidthPx / 2 - 12)
                 }
@@ -272,16 +302,25 @@ class IslandOverlayService : LifecycleService(), SavedStateRegistryOwner {
         }
     }
 
-    private fun addOverlay() {
+    private fun addOverlay(isLandscape: Boolean) {
         if (!enableFloatingOverlay) return
+        _isLandscapeState.value = isLandscape
 
-        val params = WindowManager.LayoutParams(
-            if (overlayMode == MODE_STATUS_BAR) WindowManager.LayoutParams.MATCH_PARENT else WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+        val flags = if (isLandscape) {
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+        } else {
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+        }
+
+        val params = WindowManager.LayoutParams(
+            if (isLandscape) WindowManager.LayoutParams.MATCH_PARENT else WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            flags,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.CENTER_HORIZONTAL
@@ -289,7 +328,7 @@ class IslandOverlayService : LifecycleService(), SavedStateRegistryOwner {
                 layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
             }
             x = 0
-            y = if (overlayMode == MODE_STATUS_BAR) 4 else 140
+            y = if (isLandscape) 4 else 140
         }
 
         val composeView = ComposeView(this).apply {
@@ -297,18 +336,16 @@ class IslandOverlayService : LifecycleService(), SavedStateRegistryOwner {
             setViewTreeSavedStateRegistryOwner(this@IslandOverlayService)
 
             setContent {
-                if (overlayMode == MODE_STATUS_BAR) {
+                val currentLandscape = _isLandscapeState.value
+                if (currentLandscape) {
+                    // ── Landscape Mode: Status Bar (Non-clickable display only!) ──
                     StatusBarLiveBar(
                         memStats = _memStats.value,
                         cpuStats = _cpuStats.value,
                         fpsStats = _fpsStats.value,
-                        onOpenApp = {
-                            startActivity(Intent(this@IslandOverlayService, MainActivity::class.java).apply {
-                                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
-                            })
-                        }
                     )
                 } else {
+                    // ── Portrait Mode: Dynamic Floating Island ──
                     DynamicIslandPill(
                         memStats   = _memStats.value,
                         cpuStats   = _cpuStats.value,
@@ -322,9 +359,10 @@ class IslandOverlayService : LifecycleService(), SavedStateRegistryOwner {
                         onSwipeRight = { handleSwipeRight() },
                         onRestoreFromDock = { restoreFromSideDock() },
                         onOpenApp = {
-                            startActivity(Intent(this@IslandOverlayService, MainActivity::class.java).apply {
-                                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
-                            })
+                            val intent = Intent(this@IslandOverlayService, MainActivity::class.java).apply {
+                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                            }
+                            startActivity(intent)
                         }
                     )
                 }
@@ -335,15 +373,27 @@ class IslandOverlayService : LifecycleService(), SavedStateRegistryOwner {
         windowManager.addView(composeView, params)
     }
 
-    private fun updateOverlayPosition() {
+    private fun updateOverlayForOrientation(isLandscape: Boolean) {
+        _isLandscapeState.value = isLandscape
         overlayView?.let { view ->
             val params = view.layoutParams as WindowManager.LayoutParams
-            params.width = if (overlayMode == MODE_STATUS_BAR) WindowManager.LayoutParams.MATCH_PARENT else WindowManager.LayoutParams.WRAP_CONTENT
-            params.x = 0
-            params.y = if (overlayMode == MODE_STATUS_BAR) 4 else 140
+            if (isLandscape) {
+                params.width = WindowManager.LayoutParams.MATCH_PARENT
+                params.y = 4
+                params.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                        WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                        WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+            } else {
+                params.width = WindowManager.LayoutParams.WRAP_CONTENT
+                params.x = 0
+                params.y = 140
+                params.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                        WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                        WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
+            }
             windowPosition = WindowSnapPosition.CENTER
             _isSideDocked.value = false
-            windowManager.updateViewLayout(view, params)
+            try { windowManager.updateViewLayout(view, params) } catch (_: Exception) {}
         }
     }
 
@@ -407,12 +457,14 @@ class IslandOverlayService : LifecycleService(), SavedStateRegistryOwner {
     }
 }
 
+/**
+ * Landscape Status Bar Mode (Non-clickable, display only!)
+ */
 @Composable
 private fun StatusBarLiveBar(
     memStats: MemoryStats?,
     cpuStats: CpuStats?,
     fpsStats: FpsStats?,
-    onOpenApp: () -> Unit
 ) {
     val ramPct = memStats?.usedPercent ?: 0f
     val cpuPct = cpuStats?.totalPercent ?: 0f
@@ -440,8 +492,7 @@ private fun StatusBarLiveBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(28.dp)
-                .padding(horizontal = 12.dp)
-                .clickable { onOpenApp() },
+                .padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
@@ -497,8 +548,7 @@ private fun StatusBarLiveBar(
 }
 
 // ─────────────────────────────────────────────────────────
-// Floating Dynamic Island Composable
-// Supports Side Tool Dock Mode (Edge Indicator Mark with Double-Tap to Restore)
+// Portrait Mode Dynamic Island Composable
 // ─────────────────────────────────────────────────────────
 @Composable
 private fun DynamicIslandPill(
@@ -533,7 +583,6 @@ private fun DynamicIslandPill(
 
     TaskManagerTheme {
         if (isSideDocked) {
-            // ── Side Tool Dock Mode (Edge Indicator Mark) ──
             Box(
                 modifier = Modifier
                     .width(16.dp)
@@ -607,7 +656,6 @@ private fun DynamicIslandPill(
                 contentAlignment = Alignment.Center,
             ) {
                 if (!expanded) {
-                    // ── Ultra-Compact Pill ──
                     Row(
                         modifier = Modifier
                             .fillMaxSize()
@@ -649,7 +697,6 @@ private fun DynamicIslandPill(
                         }
                     }
                 } else {
-                    // ── Expanded Panel ──
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
