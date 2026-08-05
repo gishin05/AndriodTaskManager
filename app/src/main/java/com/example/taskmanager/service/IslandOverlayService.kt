@@ -328,7 +328,7 @@ class IslandOverlayService : LifecycleService(), SavedStateRegistryOwner {
                 layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
             }
             x = 0
-            y = if (isLandscape) 4 else 140
+            y = 4 // Positioned directly inside top status bar area!
         }
 
         val composeView = ComposeView(this).apply {
@@ -386,7 +386,7 @@ class IslandOverlayService : LifecycleService(), SavedStateRegistryOwner {
             } else {
                 params.width = WindowManager.LayoutParams.WRAP_CONTENT
                 params.x = 0
-                params.y = 140
+                params.y = 4
                 params.flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
                         WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
                         WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
