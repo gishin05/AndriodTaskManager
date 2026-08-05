@@ -11,9 +11,6 @@ import android.graphics.PixelFormat
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
-import android.support.v4.media.MediaMetadataCompat
-import android.support.v4.media.session.MediaSessionCompat
-import android.support.v4.media.session.PlaybackStateCompat
 import android.view.Choreographer
 import android.view.Gravity
 import android.view.View
@@ -30,6 +27,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Thermostat
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -47,7 +45,6 @@ import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.setViewTreeLifecycleOwner
-import androidx.media.app.NotificationCompat.MediaStyle
 import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
@@ -57,6 +54,8 @@ import com.example.taskmanager.TaskManagerApp
 import com.example.taskmanager.data.model.CpuStats
 import com.example.taskmanager.data.model.FpsStats
 import com.example.taskmanager.data.model.MemoryStats
+import com.example.taskmanager.data.model.NetworkSpeedStats
+import com.example.taskmanager.data.model.ThermalVoltageStats
 import com.example.taskmanager.data.repository.PerformanceRepository
 import com.example.taskmanager.theme.AccentCyan
 import com.example.taskmanager.theme.AccentViolet
@@ -75,7 +74,6 @@ class IslandOverlayService : LifecycleService(), SavedStateRegistryOwner {
 
     private lateinit var windowManager: WindowManager
     private lateinit var notificationManager: NotificationManager
-    private lateinit var mediaSession: MediaSessionCompat
     private var overlayView: View? = null
     private val performanceRepo by lazy { PerformanceRepository(this) }
 
@@ -83,10 +81,12 @@ class IslandOverlayService : LifecycleService(), SavedStateRegistryOwner {
     override val savedStateRegistry: SavedStateRegistry
         get() = savedStateRegistryController.savedStateRegistry
 
-    // Live state
+    // Live system stats state
     private val _memStats   = mutableStateOf<MemoryStats?>(null)
     private val _cpuStats   = mutableStateOf<CpuStats?>(null)
     private val _fpsStats   = mutableStateOf<FpsStats?>(null)
+    private val _thermalStats = mutableStateOf<ThermalVoltageStats?>(null)
+    private val _networkStats = mutableStateOf<NetworkSpeedStats?>(null)
     private val _activeApps = mutableStateOf(0)
     private val _expanded   = mutableStateOf(false)
     private val _isSideDocked = mutableStateOf(false)
@@ -111,37 +111,18 @@ class IslandOverlayService : LifecycleService(), SavedStateRegistryOwner {
         windowManager       = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-        initMediaSession()
-
         val isLandscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
         _isLandscapeState.value = isLandscape
 
         startForegroundWithNotification(
-            title = "Task Manager",
-            text  = "RAM: -- | CPU: -- | FPS: --",
-            subText = "HyperOS Live Media Activity"
+            title = "Task Manager System Service",
+            text  = "Hardware Polling Active (Privileged Priv-App)",
+            subText = "HyperOS Native System Overlay"
         )
 
         isFrameCallbackActive = true
         Choreographer.getInstance().postFrameCallback(choreographerCallback)
         startCollecting()
-    }
-
-    private fun initMediaSession() {
-        mediaSession = MediaSessionCompat(this, "SystemMonitorMediaSession").apply {
-            setFlags(MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS or MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS)
-            setCallback(object : MediaSessionCompat.Callback() {
-                override fun onPlay() {}
-                override fun onPause() {}
-            })
-            isActive = true
-        }
-
-        val pbState = PlaybackStateCompat.Builder()
-            .setActions(PlaybackStateCompat.ACTION_PLAY or PlaybackStateCompat.ACTION_PAUSE or PlaybackStateCompat.ACTION_PLAY_PAUSE)
-            .setState(PlaybackStateCompat.STATE_PLAYING, PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN, 1.0f)
-            .build()
-        mediaSession.setPlaybackState(pbState)
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
@@ -181,10 +162,6 @@ class IslandOverlayService : LifecycleService(), SavedStateRegistryOwner {
         isFrameCallbackActive = false
         Choreographer.getInstance().removeFrameCallback(choreographerCallback)
         removeOverlay()
-        if (::mediaSession.isInitialized) {
-            mediaSession.isActive = false
-            mediaSession.release()
-        }
         super.onDestroy()
     }
 
@@ -199,23 +176,18 @@ class IslandOverlayService : LifecycleService(), SavedStateRegistryOwner {
             putBoolean("miui.show_in_statusbar", true)
             putBoolean("extra_show_in_statusbar", true)
             putInt("miui.status_bar_notification_style", 1)
-            putString("miui.live_activity_type", "media")
         }
-
-        val mediaStyle = MediaStyle()
-            .setMediaSession(mediaSession.sessionToken)
 
         val notification: Notification = NotificationCompat.Builder(this, TaskManagerApp.OVERLAY_CHANNEL_ID)
             .setContentTitle(title)
             .setContentText(text)
             .setSubText(subText)
             .setSmallIcon(android.R.drawable.ic_menu_info_details)
-            .setStyle(mediaStyle)
             .setContentIntent(openIntent)
             .setOngoing(true)
             .setSilent(true)
-            .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
-            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .addExtras(hyperOsExtras)
             .build()
@@ -224,14 +196,21 @@ class IslandOverlayService : LifecycleService(), SavedStateRegistryOwner {
             startForeground(
                 TaskManagerApp.OVERLAY_NOTIFICATION_ID,
                 notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
             )
         } else {
             startForeground(TaskManagerApp.OVERLAY_NOTIFICATION_ID, notification)
         }
     }
 
-    private fun updateSystemNotification(ramPct: Float, cpuPct: Float, fps: Int, activeAppsCount: Int) {
+    private fun updateSystemNotification(
+        ramPct: Float,
+        cpuPct: Float,
+        fps: Int,
+        tempC: Float,
+        downKbps: Float,
+        activeAppsCount: Int
+    ) {
         val ramInt = (ramPct * 100).roundToInt()
         val cpuInt = (cpuPct * 100).roundToInt()
         val openIntent = PendingIntent.getActivity(
@@ -242,44 +221,25 @@ class IslandOverlayService : LifecycleService(), SavedStateRegistryOwner {
 
         val liveIconBitmap = IconUtils.createMetricBitmap("$ramInt%", ramPct)
 
-        // Update MediaSession metadata live so Android 16 / HyperOS hooks directly into it!
-        val metadata = MediaMetadataCompat.Builder()
-            .putString(MediaMetadataCompat.METADATA_KEY_TITLE, "RAM $ramInt% • CPU $cpuInt%")
-            .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, "$fps FPS • System Monitor")
-            .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, "Task Manager HyperIsland")
-            .putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, liveIconBitmap)
-            .putBitmap(MediaMetadataCompat.METADATA_KEY_ART, liveIconBitmap)
-            .build()
-        mediaSession.setMetadata(metadata)
-
-        val pbState = PlaybackStateCompat.Builder()
-            .setActions(PlaybackStateCompat.ACTION_PLAY or PlaybackStateCompat.ACTION_PAUSE or PlaybackStateCompat.ACTION_PLAY_PAUSE)
-            .setState(PlaybackStateCompat.STATE_PLAYING, PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN, 1.0f)
-            .build()
-        mediaSession.setPlaybackState(pbState)
-
         val hyperOsExtras = Bundle().apply {
             putBoolean("miui.show_in_statusbar", true)
             putBoolean("extra_show_in_statusbar", true)
             putInt("miui.status_bar_notification_style", 1)
-            putString("miui.live_activity_type", "media")
         }
 
-        val mediaStyle = MediaStyle()
-            .setMediaSession(mediaSession.sessionToken)
+        val speedText = if (downKbps > 1024f) "${"%.1f".format(downKbps / 1024f)}MB/s" else "${downKbps.roundToInt()}KB/s"
 
         val notification: Notification = NotificationCompat.Builder(this, TaskManagerApp.OVERLAY_CHANNEL_ID)
             .setContentTitle("RAM $ramInt% • CPU $cpuInt% • $fps FPS")
-            .setContentText("$activeAppsCount Active Apps • HyperOS Media Island")
-            .setSubText("HyperOS Media Activity")
+            .setContentText("${"%.1f".format(tempC)}°C • ↓$speedText • System Priv-App")
+            .setSubText("HyperOS System Monitor")
             .setSmallIcon(android.R.drawable.ic_menu_info_details)
             .setLargeIcon(liveIconBitmap)
-            .setStyle(mediaStyle)
             .setContentIntent(openIntent)
             .setOngoing(true)
             .setSilent(true)
-            .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
-            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .addExtras(hyperOsExtras)
             .build()
@@ -395,6 +355,8 @@ class IslandOverlayService : LifecycleService(), SavedStateRegistryOwner {
                         memStats = _memStats.value,
                         cpuStats = _cpuStats.value,
                         fpsStats = _fpsStats.value,
+                        thermalStats = _thermalStats.value,
+                        networkStats = _networkStats.value,
                     )
                 } else {
                     // ── Portrait Mode: Dynamic Floating Island ──
@@ -402,6 +364,8 @@ class IslandOverlayService : LifecycleService(), SavedStateRegistryOwner {
                         memStats   = _memStats.value,
                         cpuStats   = _cpuStats.value,
                         fpsStats   = _fpsStats.value,
+                        thermalStats = _thermalStats.value,
+                        networkStats = _networkStats.value,
                         activeApps = _activeApps.value,
                         expanded   = _expanded.value,
                         isSideDocked = _isSideDocked.value,
@@ -462,11 +426,15 @@ class IslandOverlayService : LifecycleService(), SavedStateRegistryOwner {
                 _memStats.value = snap.memory
                 _cpuStats.value = snap.cpu
                 _fpsStats.value = snap.fps
+                _thermalStats.value = snap.thermal
+                _networkStats.value = snap.networkSpeed
 
                 updateSystemNotification(
                     ramPct = snap.memory.usedPercent,
                     cpuPct = snap.cpu.totalPercent,
                     fps = snap.fps.currentFps,
+                    tempC = snap.thermal.batteryTempC,
+                    downKbps = snap.networkSpeed.downlinkKbps,
                     activeAppsCount = _activeApps.value
                 )
             }
@@ -517,11 +485,14 @@ private fun StatusBarLiveBar(
     memStats: MemoryStats?,
     cpuStats: CpuStats?,
     fpsStats: FpsStats?,
+    thermalStats: ThermalVoltageStats?,
+    networkStats: NetworkSpeedStats?,
 ) {
     val ramPct = memStats?.usedPercent ?: 0f
     val cpuPct = cpuStats?.totalPercent ?: 0f
     val fps    = fpsStats?.currentFps ?: 0
     val maxFps = fpsStats?.refreshRate?.roundToInt() ?: 60
+    val tempC  = thermalStats?.batteryTempC ?: 0f
 
     val ramColor = when {
         ramPct > 0.85f -> Color(0xFFEF4444)
@@ -577,6 +548,15 @@ private fun StatusBarLiveBar(
                         color = Color.White
                     )
                 }
+
+                Text("•", fontSize = 10.sp, color = Color(0xFF64748B))
+
+                Text(
+                    text = "${"%.1f".format(tempC)}°C",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFF59E0B)
+                )
             }
 
             Row(
@@ -607,6 +587,8 @@ private fun DynamicIslandPill(
     memStats: MemoryStats?,
     cpuStats: CpuStats?,
     fpsStats: FpsStats?,
+    thermalStats: ThermalVoltageStats?,
+    networkStats: NetworkSpeedStats?,
     activeApps: Int,
     expanded: Boolean,
     isSideDocked: Boolean,
@@ -621,6 +603,9 @@ private fun DynamicIslandPill(
     val cpuPct = cpuStats?.totalPercent ?: 0f
     val fps    = fpsStats?.currentFps ?: 0
     val maxFps = fpsStats?.refreshRate?.roundToInt() ?: 60
+    val tempC  = thermalStats?.batteryTempC ?: 0f
+    val voltV  = thermalStats?.batteryVoltageV ?: 0f
+    val downKbps = networkStats?.downlinkKbps ?: 0f
 
     val ramColor = when {
         ramPct > 0.85f -> Color(0xFFEF4444)
@@ -660,12 +645,12 @@ private fun DynamicIslandPill(
             }
         } else {
             val targetWidth by animateDpAsState(
-                if (expanded) 320.dp else 138.dp,
+                if (expanded) 320.dp else 142.dp,
                 spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium),
                 label = "island_w"
             )
             val targetHeight by animateDpAsState(
-                if (expanded) 130.dp else 26.dp,
+                if (expanded) 140.dp else 26.dp,
                 spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium),
                 label = "island_h"
             )
@@ -768,7 +753,7 @@ private fun DynamicIslandPill(
                                 Text("Task Manager", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White)
                             }
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text(if (activeApps > 0) "$activeApps apps" else "Live", fontSize = 11.sp, color = Color(0xFF94A3B8))
+                                Text(if (activeApps > 0) "$activeApps apps" else "Priv-App", fontSize = 11.sp, color = Color(0xFF94A3B8))
                                 Box(
                                     modifier = Modifier
                                         .clip(CircleShape)
@@ -819,12 +804,17 @@ private fun DynamicIslandPill(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
-                                Text("CPU:", fontSize = 11.sp, color = Color(0xFF94A3B8))
+                                Icon(Icons.Default.Thermostat, null, tint = Color(0xFFF59E0B), modifier = Modifier.size(13.dp))
                                 Text(
-                                    "${(cpuPct * 100).roundToInt()}%",
+                                    "${"%.1f".format(tempC)}°C",
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color.White
+                                    color = Color(0xFFF59E0B)
+                                )
+                                Text(
+                                    "(${"%.2f".format(voltV)}V)",
+                                    fontSize = 10.sp,
+                                    color = Color(0xFF64748B)
                                 )
                             }
 

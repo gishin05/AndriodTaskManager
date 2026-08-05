@@ -2,7 +2,11 @@ package com.example.taskmanager.data.repository
 
 import android.app.ActivityManager
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.hardware.display.DisplayManager
+import android.net.TrafficStats
+import android.os.BatteryManager
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
@@ -13,15 +17,16 @@ import android.view.Display
 import com.example.taskmanager.data.model.CpuStats
 import com.example.taskmanager.data.model.FpsStats
 import com.example.taskmanager.data.model.MemoryStats
+import com.example.taskmanager.data.model.NetworkSpeedStats
 import com.example.taskmanager.data.model.PerformanceSnapshot
 import com.example.taskmanager.data.model.StorageStats
+import com.example.taskmanager.data.model.ThermalVoltageStats
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import java.io.File
-import java.util.concurrent.TimeUnit
 import kotlin.math.roundToInt
 
 class PerformanceRepository(private val context: Context) {
@@ -36,6 +41,11 @@ class PerformanceRepository(private val context: Context) {
     private var lastTotalTime = 0L
     private var lastSampleTime = 0L
     private var lastProcessCpuTime = 0L
+
+    // Network speed tracking
+    private var lastRxBytes = 0L
+    private var lastTxBytes = 0L
+    private var lastNetTime = 0L
 
     // FPS tracking via frame time deltas
     private val fpsHistory = ArrayDeque<Int>(60)
@@ -102,6 +112,8 @@ class PerformanceRepository(private val context: Context) {
                     cpu = readCpu(),
                     storage = readStorage(),
                     fps = readFps(),
+                    thermal = readThermalAndVoltage(),
+                    networkSpeed = readNetworkSpeed(),
                 )
             )
             delay(intervalMs)
@@ -151,7 +163,7 @@ class PerformanceRepository(private val context: Context) {
         val coreCount = Runtime.getRuntime().availableProcessors()
 
         try {
-            val procStatFile = java.io.File("/proc/stat")
+            val procStatFile = File("/proc/stat")
             if (procStatFile.exists() && procStatFile.canRead()) {
                 val line = procStatFile.bufferedReader().readLine() ?: ""
                 val parts = line.trim().split("\\s+".toRegex())
@@ -193,8 +205,8 @@ class PerformanceRepository(private val context: Context) {
             var activeFreqSum = 0L
             var maxFreqSum    = 0L
             for (i in 0 until coreCount) {
-                val curFile = java.io.File("/sys/devices/system/cpu/cpu$i/cpufreq/scaling_cur_freq")
-                val maxFile = java.io.File("/sys/devices/system/cpu/cpu$i/cpufreq/scaling_max_freq")
+                val curFile = File("/sys/devices/system/cpu/cpu$i/cpufreq/scaling_cur_freq")
+                val maxFile = File("/sys/devices/system/cpu/cpu$i/cpufreq/scaling_max_freq")
                 if (curFile.exists() && curFile.canRead() && maxFile.exists() && maxFile.canRead()) {
                     val cur = curFile.readText().trim().toLongOrNull() ?: 0L
                     val max = maxFile.readText().trim().toLongOrNull() ?: 1L
@@ -236,5 +248,63 @@ class PerformanceRepository(private val context: Context) {
             freeGb = free,
             usedPercent = if (total > 0) used / total else 0f,
         )
+    }
+
+    fun readThermalAndVoltage(): ThermalVoltageStats {
+        val batteryIntent = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val tempTenths = batteryIntent?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, 0) ?: 0
+        val tempC = tempTenths / 10.0f
+
+        val voltageMv = batteryIntent?.getIntExtra(BatteryManager.EXTRA_VOLTAGE, 0) ?: 0
+        val voltageV = voltageMv / 1000.0f
+
+        var cpuTempC = tempC
+        try {
+            val thermalDir = File("/sys/class/thermal")
+            if (thermalDir.exists() && thermalDir.isDirectory) {
+                val zones = thermalDir.listFiles { _, name -> name.startsWith("thermal_zone") }
+                zones?.forEach { zone ->
+                    val typeFile = File(zone, "type")
+                    val tempFile = File(zone, "temp")
+                    if (typeFile.exists() && tempFile.exists()) {
+                        val type = typeFile.readText().trim()
+                        if (type.contains("cpu", ignoreCase = true) || type.contains("tsens", ignoreCase = true) || type.contains("soc", ignoreCase = true)) {
+                            val rawTemp = tempFile.readText().trim().toFloatOrNull() ?: 0f
+                            val valC = if (rawTemp > 1000f) rawTemp / 1000f else rawTemp
+                            if (valC in 15f..105f) {
+                                cpuTempC = valC
+                                return@forEach
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+
+        return ThermalVoltageStats(batteryTempC = tempC, batteryVoltageV = voltageV, cpuTempC = cpuTempC)
+    }
+
+    fun readNetworkSpeed(): NetworkSpeedStats {
+        val curRx = TrafficStats.getTotalRxBytes()
+        val curTx = TrafficStats.getTotalTxBytes()
+        val now = System.currentTimeMillis()
+
+        var rxSpeedKbps = 0f
+        var txSpeedKbps = 0f
+
+        if (lastNetTime > 0L && now > lastNetTime) {
+            val timeSec = (now - lastNetTime) / 1000f
+            val diffRx = if (curRx >= lastRxBytes && lastRxBytes > 0) curRx - lastRxBytes else 0L
+            val diffTx = if (curTx >= lastTxBytes && lastTxBytes > 0) curTx - lastTxBytes else 0L
+
+            rxSpeedKbps = (diffRx / 1024f) / timeSec
+            txSpeedKbps = (diffTx / 1024f) / timeSec
+        }
+
+        lastRxBytes = curRx
+        lastTxBytes = curTx
+        lastNetTime = now
+
+        return NetworkSpeedStats(downlinkKbps = rxSpeedKbps, uplinkKbps = txSpeedKbps)
     }
 }

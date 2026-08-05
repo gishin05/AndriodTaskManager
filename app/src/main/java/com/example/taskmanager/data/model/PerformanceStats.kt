@@ -29,10 +29,23 @@ data class FpsStats(
     val history: List<Int>,         // last 60 FPS samples
 )
 
+data class ThermalVoltageStats(
+    val batteryTempC: Float,        // °C
+    val batteryVoltageV: Float,      // V
+    val cpuTempC: Float,            // CPU Thermal Zone °C
+)
+
+data class NetworkSpeedStats(
+    val downlinkKbps: Float,        // KB/s
+    val uplinkKbps: Float,          // KB/s
+)
+
 data class PerformanceSnapshot(
     val memory: MemoryStats,
     val cpu: CpuStats,
     val storage: StorageStats,
     val fps: FpsStats,
+    val thermal: ThermalVoltageStats,
+    val networkSpeed: NetworkSpeedStats,
     val timestamp: Long = System.currentTimeMillis(),
 )
