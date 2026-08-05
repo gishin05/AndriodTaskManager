@@ -17,48 +17,25 @@
 ## ✨ Features
 
 ### 📊 Real-Time System Monitoring
-- **CPU Usage** — Per-core and total load via `/proc/stat`
-- **RAM / Memory** — Live used/available split with `ActivityManager`
+- **CPU Usage** — Per-core and total load
+- **RAM / Memory** — Live used/available split
 - **FPS Counter** — Frame pacing via `Choreographer`
-- **Thermal & Voltage** — Battery temperature + `/sys/class/thermal/` zones
-- **Network Speed** — Real-time up/downlink via `TrafficStats`
+- **Thermal & Voltage** — Battery temperature readings
+- **Network Speed** — Real-time up/downlink speeds
 
 ### 🏝️ Native Dynamic Island Integration
-
-A tri-tier strategy that works across every modern Android phone:
-
-| Tier | Target | API Used |
-|------|--------|----------|
-| **1** | All Android 16 phones (Pixel, Samsung, Xiaomi, etc.) | `Notification.ProgressStyle` + `EXTRA_REQUEST_PROMOTED_ONGOING` |
-| **2** | HyperOS / MIUI (Xiaomi, POCO, Redmi) | [HyperIsland Toolkit](https://github.com/D4vidDf/HyperIsland_Notification_Kit) |
-| **3** | Android 8–15 fallback | Standard ongoing notification with progress bar |
+Works on **every modern Android phone** — not just Xiaomi:
+- **Android 16+** — Promotes to a native Live Update chip in the status bar on all OEM devices
+- **HyperOS / MIUI** — Native island integration via the HyperIsland Toolkit
+- **Android 8–15** — Falls back to a standard ongoing notification with a live progress bar
 
 ### 🖥️ Landscape Status Bar Mode
-When rotated to landscape, the app seamlessly transitions the live data to a **non-clickable, always-visible status bar overlay** showing CPU, RAM, temperature, and FPS simultaneously.
+When rotated to landscape, live metrics appear in a non-clickable always-visible status bar overlay showing CPU, RAM, temperature, and FPS simultaneously.
 
 ### 🔔 Smart Notification Design
-- White monochrome line-chart icon for system tray
-- ASCII progress bars (`▓▓▓▓░░ CPU`) in notification body
+- Custom purple line-chart icon in the system tray
+- ASCII progress bars (`▓▓▓▓░░ CPU`) in the notification body
 - Live metrics in the title: `CPU 23% · RAM 61% · 45 FPS`
-
----
-
-## 📱 Screenshots
-
-<div align="center">
-<table>
-  <tr>
-    <td align="center"><b>Dynamic Island Active</b></td>
-    <td align="center"><b>App Running</b></td>
-    <td align="center"><b>Live Notification</b></td>
-  </tr>
-  <tr>
-    <td><img src="docs/screenshot_island.png" width="220"/></td>
-    <td><img src="docs/screenshot_app.png" width="220"/></td>
-    <td><img src="docs/screenshot_notification.png" width="220"/></td>
-  </tr>
-</table>
-</div>
 
 ---
 
@@ -89,18 +66,10 @@ app/
 |------|---------|-------------|
 | Android OS | 8.0 (API 26) | 16 (API 36) |
 | Dynamic Island | Any Android 16 device | Xiaomi HyperOS 3.0+ |
-| Permissions | `POST_NOTIFICATIONS`, `SYSTEM_ALERT_WINDOW` | + `USAGE_STATS`, `READ_LOGS` |
-
-> **Note:** For full CPU and thermal data from `/proc/stat` and `/sys/class/thermal/`, the device needs privileged access or the app must be installed as a system app in `/system/priv-app/`.
 
 ---
 
 ## 🚀 Build & Install
-
-### Prerequisites
-- Android Studio Ladybug (2024.2.1+) or JDK 17
-- Android SDK with API 36 installed
-- ADB connected device
 
 ### Build
 
@@ -116,70 +85,7 @@ cd AndriodTaskManager
 adb install app/build/outputs/apk/debug/app-debug.apk
 ```
 
-### Or use the pre-built APK
-
-Download `app-debug.apk` from the [Releases](../../releases) page.
-
----
-
-## 🔑 Key Permissions
-
-```xml
-<!-- Required for Live Updates chip in status bar (Android 16) -->
-<uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS"/>
-<!-- Overlay for landscape status bar mode -->
-<uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
-<!-- Deep system metrics -->
-<uses-permission android:name="android.permission.READ_LOGS"/>
-<uses-permission android:name="android.permission.BATTERY_STATS"/>
-<uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"/>
-```
-
----
-
-## 🧩 Dynamic Island – How It Works
-
-```
-App starts foreground service (specialUse)
-        │
-        ▼
-Is Android 16+ (API 36)?
-  YES → Notification.ProgressStyle + EXTRA_REQUEST_PROMOTED_ONGOING
-        → System promotes to status bar Live Update chip ✅
-        │
-  NO  → Is HyperOS / MIUI?
-          YES → HyperIsland Toolkit (io.github.d4viddf:hyperisland_kit:0.4.4)
-                → miui.focus.param payload → Island shows system stats ✅
-          NO  → Standard ongoing notification with progress bar
-```
-
-The Live Update chip displays:
-- **Progress ring** driven by CPU%
-- **Title**: `CPU 34% · RAM 58% · 60 FPS`
-- **Body**: `▓▓▓░░░ RAM   ▓▓▓▓░░ CPU   38.5°C   ↓212 KB/s`
-
----
-
-## 📦 Dependencies
-
-```kotlin
-// Jetpack Compose BOM
-implementation(platform("androidx.compose:compose-bom:latest"))
-implementation("androidx.compose.material3:material3")
-
-// Lifecycle / Service
-implementation("androidx.lifecycle:lifecycle-service:2.x")
-implementation("androidx.lifecycle:lifecycle-runtime-compose:2.x")
-
-// Navigation
-implementation("androidx.navigation3:navigation3-ui:1.0.0-alpha01")
-
-// HyperOS Dynamic Island (Xiaomi / MIUI)
-implementation("io.github.d4viddf:hyperisland_kit:0.4.4")
-
-// Media session compatibility
-implementation("androidx.media:media:1.7.0")
-```
+### Or download the pre-built APK from the [Releases](../../releases) page.
 
 ---
 
@@ -194,6 +100,6 @@ Permission is granted to use, copy, modify, and distribute this software.
 
 <div align="center">
 
-**Built with ❤️ using Kotlin · Jetpack Compose · Android 16 APIs**
+**Built with ❤️ using Kotlin · Jetpack Compose · Android 16**
 
 </div>
