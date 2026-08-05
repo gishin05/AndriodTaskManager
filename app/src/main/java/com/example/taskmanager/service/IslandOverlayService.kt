@@ -11,6 +11,9 @@ import android.graphics.PixelFormat
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
+import android.support.v4.media.MediaMetadataCompat
+import android.support.v4.media.session.MediaSessionCompat
+import android.support.v4.media.session.PlaybackStateCompat
 import android.view.Choreographer
 import android.view.Gravity
 import android.view.View
@@ -44,6 +47,7 @@ import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.setViewTreeLifecycleOwner
+import androidx.media.app.NotificationCompat.MediaStyle
 import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
@@ -71,6 +75,7 @@ class IslandOverlayService : LifecycleService(), SavedStateRegistryOwner {
 
     private lateinit var windowManager: WindowManager
     private lateinit var notificationManager: NotificationManager
+    private lateinit var mediaSession: MediaSessionCompat
     private var overlayView: View? = null
     private val performanceRepo by lazy { PerformanceRepository(this) }
 
@@ -105,19 +110,38 @@ class IslandOverlayService : LifecycleService(), SavedStateRegistryOwner {
         super.onCreate()
         windowManager       = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        
+
+        initMediaSession()
+
         val isLandscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
         _isLandscapeState.value = isLandscape
 
         startForegroundWithNotification(
             title = "Task Manager",
             text  = "RAM: -- | CPU: -- | FPS: --",
-            subText = "HyperOS Live Activity"
+            subText = "HyperOS Live Media Activity"
         )
 
         isFrameCallbackActive = true
         Choreographer.getInstance().postFrameCallback(choreographerCallback)
         startCollecting()
+    }
+
+    private fun initMediaSession() {
+        mediaSession = MediaSessionCompat(this, "SystemMonitorMediaSession").apply {
+            setFlags(MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS or MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS)
+            setCallback(object : MediaSessionCompat.Callback() {
+                override fun onPlay() {}
+                override fun onPause() {}
+            })
+            isActive = true
+        }
+
+        val pbState = PlaybackStateCompat.Builder()
+            .setActions(PlaybackStateCompat.ACTION_PLAY or PlaybackStateCompat.ACTION_PAUSE or PlaybackStateCompat.ACTION_PLAY_PAUSE)
+            .setState(PlaybackStateCompat.STATE_PLAYING, PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN, 1.0f)
+            .build()
+        mediaSession.setPlaybackState(pbState)
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
@@ -157,6 +181,10 @@ class IslandOverlayService : LifecycleService(), SavedStateRegistryOwner {
         isFrameCallbackActive = false
         Choreographer.getInstance().removeFrameCallback(choreographerCallback)
         removeOverlay()
+        if (::mediaSession.isInitialized) {
+            mediaSession.isActive = false
+            mediaSession.release()
+        }
         super.onDestroy()
     }
 
@@ -174,11 +202,15 @@ class IslandOverlayService : LifecycleService(), SavedStateRegistryOwner {
             putString("miui.live_activity_type", "media")
         }
 
+        val mediaStyle = MediaStyle()
+            .setMediaSession(mediaSession.sessionToken)
+
         val notification: Notification = NotificationCompat.Builder(this, TaskManagerApp.OVERLAY_CHANNEL_ID)
             .setContentTitle(title)
             .setContentText(text)
             .setSubText(subText)
             .setSmallIcon(android.R.drawable.ic_menu_info_details)
+            .setStyle(mediaStyle)
             .setContentIntent(openIntent)
             .setOngoing(true)
             .setSilent(true)
@@ -192,7 +224,7 @@ class IslandOverlayService : LifecycleService(), SavedStateRegistryOwner {
             startForeground(
                 TaskManagerApp.OVERLAY_NOTIFICATION_ID,
                 notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
             )
         } else {
             startForeground(TaskManagerApp.OVERLAY_NOTIFICATION_ID, notification)
@@ -210,6 +242,22 @@ class IslandOverlayService : LifecycleService(), SavedStateRegistryOwner {
 
         val liveIconBitmap = IconUtils.createMetricBitmap("$ramInt%", ramPct)
 
+        // Update MediaSession metadata live so Android 16 / HyperOS hooks directly into it!
+        val metadata = MediaMetadataCompat.Builder()
+            .putString(MediaMetadataCompat.METADATA_KEY_TITLE, "RAM $ramInt% • CPU $cpuInt%")
+            .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, "$fps FPS • System Monitor")
+            .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, "Task Manager HyperIsland")
+            .putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, liveIconBitmap)
+            .putBitmap(MediaMetadataCompat.METADATA_KEY_ART, liveIconBitmap)
+            .build()
+        mediaSession.setMetadata(metadata)
+
+        val pbState = PlaybackStateCompat.Builder()
+            .setActions(PlaybackStateCompat.ACTION_PLAY or PlaybackStateCompat.ACTION_PAUSE or PlaybackStateCompat.ACTION_PLAY_PAUSE)
+            .setState(PlaybackStateCompat.STATE_PLAYING, PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN, 1.0f)
+            .build()
+        mediaSession.setPlaybackState(pbState)
+
         val hyperOsExtras = Bundle().apply {
             putBoolean("miui.show_in_statusbar", true)
             putBoolean("extra_show_in_statusbar", true)
@@ -217,12 +265,16 @@ class IslandOverlayService : LifecycleService(), SavedStateRegistryOwner {
             putString("miui.live_activity_type", "media")
         }
 
+        val mediaStyle = MediaStyle()
+            .setMediaSession(mediaSession.sessionToken)
+
         val notification: Notification = NotificationCompat.Builder(this, TaskManagerApp.OVERLAY_CHANNEL_ID)
             .setContentTitle("RAM $ramInt% • CPU $cpuInt% • $fps FPS")
-            .setContentText("$activeAppsCount Active Apps • Live HyperOS Activity")
-            .setSubText("HyperOS Live Activity")
+            .setContentText("$activeAppsCount Active Apps • HyperOS Media Island")
+            .setSubText("HyperOS Media Activity")
             .setSmallIcon(android.R.drawable.ic_menu_info_details)
             .setLargeIcon(liveIconBitmap)
+            .setStyle(mediaStyle)
             .setContentIntent(openIntent)
             .setOngoing(true)
             .setSilent(true)
@@ -328,7 +380,7 @@ class IslandOverlayService : LifecycleService(), SavedStateRegistryOwner {
                 layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
             }
             x = 0
-            y = 4 // Positioned directly inside top status bar area!
+            y = 4
         }
 
         val composeView = ComposeView(this).apply {

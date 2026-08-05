@@ -53,6 +53,9 @@ dependencies {
   implementation(libs.androidx.lifecycle.runtime.ktx)
   implementation(libs.androidx.activity.compose)
 
+  // MediaSession for HyperOS Native Media HyperIsland Integration
+  implementation("androidx.media:media:1.7.0")
+
   // Arch Components
   implementation(libs.androidx.lifecycle.runtime.compose)
   implementation(libs.androidx.lifecycle.viewmodel.compose)
