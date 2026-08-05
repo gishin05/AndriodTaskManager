@@ -1,0 +1,14 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="?attr/colorControlNormal">
+  <!-- Line chart icon - monochrome white for notifications -->
+  <path
+      android:fillColor="@android:color/white"
+      android:pathData="M3,18 L3,20 L21,20 L21,18 Z"/>
+  <path
+      android:fillColor="@android:color/white"
+      android:pathData="M3,16 L7,10 L10,13 L14,6 L17,11 L21,7 L21,9 L17,13 L14,9 L10,16 L7,12 Z"/>
+</vector>
