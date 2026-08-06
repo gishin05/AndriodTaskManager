@@ -27,13 +27,7 @@ Works on **every modern Android phone** — not just Xiaomi:
 - **HyperOS / MIUI** — Native island integration via the HyperIsland Toolkit
 - **Android 8–15** — Falls back to a standard ongoing notification with a live progress bar
 
-### 🖥️ Landscape Status Bar Mode
-When rotated to landscape, live metrics appear in a non-clickable always-visible status bar overlay showing CPU, RAM, temperature, and FPS simultaneously.
 
-### 🔔 Smart Notification Design
-
-- ASCII progress bars (`▓▓▓▓░░ CPU`) in the notification body
-- Live metrics in the title: `CPU 23% · RAM 61% · 45 FPS`
 
 ---
 
