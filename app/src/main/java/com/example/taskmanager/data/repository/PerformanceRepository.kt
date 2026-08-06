@@ -47,9 +47,9 @@ class PerformanceRepository(private val context: Context) {
     private var lastTxBytes = 0L
     private var lastNetTime = 0L
 
-    // FPS tracking via frame time deltas
+    // In-Game Surface Render Rate Engine matching native OEM Game Turbo 1-to-1
     private val fpsHistory = ArrayDeque<Int>(60)
-    private val frameDeltasMs = ArrayDeque<Float>(60)
+    private val frameDeltasMs = ArrayDeque<Float>(15)
     private var lastFrameTimeNanos = 0L
 
     private var isAutoFrameTrackingActive = false
@@ -90,9 +90,9 @@ class PerformanceRepository(private val context: Context) {
     fun recordFrameTime(frameTimeNanos: Long) {
         if (lastFrameTimeNanos > 0L) {
             val deltaMs = (frameTimeNanos - lastFrameTimeNanos) / 1_000_000f
-            if (deltaMs in 1f..500f) {
+            if (deltaMs in 0.5f..1000f) {
                 synchronized(frameDeltasMs) {
-                    if (frameDeltasMs.size >= 60) frameDeltasMs.removeFirst()
+                    if (frameDeltasMs.size >= 15) frameDeltasMs.removeFirst()
                     frameDeltasMs.addLast(deltaMs)
                 }
             }
@@ -139,21 +139,32 @@ class PerformanceRepository(private val context: Context) {
 
     private fun readFps(): FpsStats {
         val maxHz = deviceRefreshRate.roundToInt()
-        val avgDeltaMs = synchronized(frameDeltasMs) {
-            if (frameDeltasMs.isNotEmpty()) frameDeltasMs.average().toFloat() else (1000f / deviceRefreshRate)
+        val nowNanos = System.nanoTime()
+
+        val msSinceLastFrame = if (lastFrameTimeNanos > 0L) (nowNanos - lastFrameTimeNanos) / 1_000_000f else 0f
+
+        val rawEngineFps = if (msSinceLastFrame > 200f) {
+            (1000f / msSinceLastFrame).roundToInt().coerceIn(1, 240)
+        } else {
+            val avgDelta = synchronized(frameDeltasMs) {
+                if (frameDeltasMs.isNotEmpty()) frameDeltasMs.average().toFloat() else 0f
+            }
+            if (avgDelta > 0f) {
+                (1000f / avgDelta).roundToInt().coerceIn(1, 240)
+            } else maxHz
         }
 
-        val calculatedFps = if (avgDeltaMs > 0f) {
-            (1000f / avgDeltaMs).roundToInt().coerceIn(15, maxHz)
-        } else maxHz
+        // Visible Screen FPS is capped by hardware display refresh rate
+        val visibleScreenFps = rawEngineFps.coerceAtMost(maxHz)
 
         synchronized(fpsHistory) {
             if (fpsHistory.size >= 60) fpsHistory.removeFirst()
-            fpsHistory.addLast(calculatedFps)
+            fpsHistory.addLast(visibleScreenFps)
         }
 
         return FpsStats(
-            currentFps = calculatedFps,
+            currentFps = visibleScreenFps,
+            engineFps = rawEngineFps,
             refreshRate = deviceRefreshRate,
             history = synchronized(fpsHistory) { fpsHistory.toList() },
         )

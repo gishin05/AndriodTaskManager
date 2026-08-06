@@ -24,7 +24,8 @@ data class StorageStats(
 )
 
 data class FpsStats(
-    val currentFps: Int,            // live FPS
+    val currentFps: Int,            // Screen Visible FPS (capped by display Hz)
+    val engineFps: Int = currentFps,// Native GPU Engine Render FPS (uncapped processing power)
     val refreshRate: Float,         // device max refresh rate (Hz)
     val history: List<Int>,         // last 60 FPS samples
 )

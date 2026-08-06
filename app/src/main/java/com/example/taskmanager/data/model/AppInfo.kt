@@ -11,6 +11,7 @@ data class AppInfo(
     val lastUsedMs: Long,
     val lastUsedLabel: String,
     val memoryCategory: MemoryCategory,
+    val processCategory: ProcessCategory,  // User / Background / System
     val ramPssMb: Long,             // Live PSS RAM memory usage in MB
     val ramLabel: String,           // e.g. "RAM: 145 MB"
     val totalNetworkBytes: Long,    // RX + TX bytes
@@ -28,4 +29,10 @@ enum class MemoryCategory(val label: String) {
     RECENT("Recent"),
     CACHED("Cached"),
     UNKNOWN("Unknown"),
+}
+
+enum class ProcessCategory {
+    USER,       // Launchable user-facing apps
+    BACKGROUND, // Services/processes running with no launcher icon
+    SYSTEM,     // Apps with FLAG_SYSTEM / pre-installed
 }

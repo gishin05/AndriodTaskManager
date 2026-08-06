@@ -100,7 +100,7 @@ fun MainScreen(
                         modifier = Modifier.size(16.dp)
                     )
                     Text(
-                        text = if (serviceActive) "Live ON" else "Live OFF",
+                        text = if (serviceActive) "Quick Tool" else "Quick Tool Off",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = TextPrimary
@@ -122,7 +122,7 @@ fun MainScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Portrait: Native HyperOS Dynamic Island  •  Landscape: Status Bar Mode",
+                    text = "🎮 Double swipe left edge handle to open Game Space HUD",
                     fontSize = 10.sp,
                     color = TextMuted,
                     fontWeight = FontWeight.Medium
@@ -138,44 +138,49 @@ fun MainScreen(
                 .padding(horizontal = 16.dp)
                 .clip(RoundedCornerShape(12.dp))
                 .background(SurfaceContainer)
-                .padding(4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                .padding(4.dp)
         ) {
             MainTab.entries.forEach { tab ->
-                val isSelected = tab == selectedTab
-                Box(
+                val selected = selectedTab == tab
+                Surface(
+                    onClick = { selectedTab = tab },
                     modifier = Modifier
                         .weight(1f)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(if (isSelected) AccentViolet else androidx.compose.ui.graphics.Color.Transparent)
-                        .clickable { selectedTab = tab }
-                        .padding(vertical = 10.dp),
-                    contentAlignment = Alignment.Center
+                        .clip(RoundedCornerShape(8.dp)),
+                    color = if (selected) AccentViolet else SurfaceContainer
                 ) {
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.padding(vertical = 10.dp),
+                        horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
                             imageVector = tab.icon,
-                            contentDescription = null,
-                            tint = if (isSelected) TextPrimary else TextMuted,
-                            modifier = Modifier.size(16.dp)
+                            contentDescription = tab.title,
+                            tint = if (selected) TextPrimary else TextMuted,
+                            modifier = Modifier.size(18.dp)
                         )
+                        Spacer(Modifier.width(6.dp))
                         Text(
                             text = tab.title,
-                            style = MaterialTheme.typography.labelLarge,
-                            color = if (isSelected) TextPrimary else TextMuted,
+                            color = if (selected) TextPrimary else TextMuted,
+                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                            style = MaterialTheme.typography.bodyMedium
                         )
                     }
                 }
             }
         }
 
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(8.dp))
 
-        // ── Tab Content ──
-        Box(modifier = Modifier.weight(1f)) {
+        // ── Tab Screens ──
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .padding(horizontal = 16.dp)
+        ) {
             when (selectedTab) {
                 MainTab.PROCESSES -> ProcessesScreen()
                 MainTab.PERFORMANCE -> PerformanceScreen()
