@@ -3,7 +3,7 @@
 <img src="docs/icon.png" width="120" alt="Task Manager Icon"/>
 
 # Android Task Manager
-### A premium system performance monitor with native Dynamic Island integration
+### A system performance monitor
 
 [![Android](https://img.shields.io/badge/Android-16%20(API%2036)-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://developer.android.com)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.x-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white)](https://kotlinlang.org)
